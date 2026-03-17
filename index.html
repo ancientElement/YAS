@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <!-- 页面元信息 -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iPhone 压缩工具</title>
+    
+    <!-- 引入外部样式表 -->
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <!-- 主容器 -->
+    <div class="container">
+        <!-- 页面标题 -->
+        <h1>📱 iPhone 压缩工具</h1>
+        
+        <!-- 文件上传区域 -->
+        <div class="upload" onclick="file.click()">
+            <p>点击选择视频/照片</p>
+            <p style="font-size:12px;color:#999">支持 MP4/MOV/JPG/PNG</p>
+        </div>
+        
+        <!-- 隐藏的文件输入框 -->
+        <input type="file" id="file" accept="video/*,image/*" onchange="selectFile(this)">
+        
+        <!-- 压缩等级选择 -->
+        <div class="level">
+            <label><input type="radio" name="lv" value="0.7" checked> 清晰</label>
+            <label><input type="radio" name="lv" value="0.5"> 标准</label>
+            <label><input type="radio" name="lv" value="0.3"> 模糊</label>
+        </div>
+        
+        <!-- 压缩按钮 -->
+        <button id="btn" onclick="compress()" disabled>开始压缩</button>
+        
+        <!-- 对比预览区域（初始隐藏） -->
+        <div class="compare" id="preview" style="display:none">
+            <!-- 原始文件预览 -->
+            <div class="box">
+                <h3>原始</h3>
+                <div id="orig"></div>
+                <div class="info" id="origInfo"></div>
+            </div>
+            <!-- 压缩后预览 -->
+            <div class="box">
+                <h3>压缩后</h3>
+                <div id="comp"></div>
+                <div class="info" id="compInfo"></div>
+            </div>
+        </div>
+        
+        <!-- 下载按钮（初始隐藏） -->
+        <button id="dl" style="display:none;margin-top:10px;background:#34C759" onclick="download()">
+            下载压缩文件
+        </button>
+    </div>
+    
+    <!-- 引入外部 JavaScript -->
+    <script src="app.js"></script>
+</body>
+
+</html>

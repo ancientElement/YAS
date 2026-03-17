@@ -1,0 +1,120 @@
+/**
+ * iPhone 视频/照片压缩工具 - 样式表
+ * 作用：定义页面布局和视觉效果
+ */
+
+/* ========== 基础重置 ========== */
+/* 清除所有元素的默认边距和内边距，统一使用 border-box 盒模型 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* ========== 页面主体 ========== */
+/* 设置字体为苹果系统字体，添加背景色和内边距 */
+body {
+    font-family: -apple-system, sans-serif;
+    padding: 20px;
+    background: #f5f5f5;
+}
+
+/* ========== 主容器 ========== */
+/* 限制最大宽度并居中显示，白色背景圆角卡片 */
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    background: #fff;
+    padding: 20px;
+    border-radius: 12px;
+}
+
+/* ========== 标题 ========== */
+h1 {
+    text-align: center;
+    font-size: 20px;
+    margin-bottom: 20px;
+}
+
+/* ========== 上传区域 ========== */
+/* 虚线边框的拖拽上传区域，蓝色主题 */
+.upload {
+    border: 2px dashed #007AFF;
+    border-radius: 12px;
+    padding: 40px;
+    text-align: center;
+    cursor: pointer;
+}
+
+/* ========== 压缩等级选择区 ========== */
+/* 居中对齐的单选按钮组 */
+.level {
+    margin: 20px 0;
+    text-align: center;
+}
+
+/* 单选按钮标签间距 */
+.level label {
+    margin: 0 15px;
+}
+
+/* ========== 按钮样式 ========== */
+/* 主按钮：蓝色背景，圆角，全宽 */
+button {
+    background: #007AFF;
+    color: #fff;
+    border: none;
+    padding: 12px 30px;
+    border-radius: 8px;
+    font-size: 16px;
+    cursor: pointer;
+    width: 100%;
+}
+
+/* 禁用状态：灰色背景 */
+button:disabled {
+    background: #ccc;
+}
+
+/* ========== 对比预览区 ========== */
+/* 两列网格布局，用于并排显示原图和压缩后 */
+.compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+/* 单个预览框 */
+.box {
+    text-align: center;
+}
+
+/* 预览框标题 */
+.box h3 {
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 8px;
+}
+
+/* 预览媒体元素（视频/图片） */
+.box video,
+.box img {
+    max-width: 100%;
+    max-height: 200px;
+    border-radius: 8px;
+}
+
+/* ========== 文件信息文字 ========== */
+/* 显示文件大小和压缩比例 */
+.info {
+    font-size: 12px;
+    color: #666;
+    margin-top: 5px;
+}
+
+/* ========== 隐藏的文件输入框 ========== */
+/* 实际点击的是上传区域，此 input 隐藏 */
+#file {
+    display: none;
+}
