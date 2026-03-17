@@ -62,27 +62,54 @@ const server = http.createServer((req, res) => {
     });
 });
 
-// 获取本机 IP 地址
-function getLocalIP() {
-  const interfaces = require('os').networkInterfaces();
-  for (const name of Object.keys(interfaces)) {
-    for (const iface of interfaces[name]) {
-      if (iface.family === 'IPv4' && !iface.internal) {
-        return iface.address;
-      }
+// 获取本机所有 IP 地址
+function getLocalIPs() {
+    try {
+        const os = require('os');
+        const interfaces = os.networkInterfaces();
+        const ips = [];
+        
+        if (!interfaces || typeof interfaces !== 'object') {
+            return ['localhost'];
+        }
+        
+        for (const name of Object.keys(interfaces)) {
+            try {
+                const ifaceArray = interfaces[name];
+                if (!Array.isArray(ifaceArray)) continue;
+                
+                for (const iface of ifaceArray) {
+                    try {
+                        const family = iface.family;
+                        const isIPv4 = family === 'IPv4' || family === 4;
+                        if (isIPv4 && !iface.internal && iface.address) {
+                            ips.push(iface.address);
+                        }
+                    } catch (e) {
+                        continue;
+                    }
+                }
+            } catch (e) {
+                continue;
+            }
+        }
+        
+        return ips.length > 0 ? ips : ['localhost'];
+    } catch (err) {
+        return ['localhost'];
     }
-  }
-  return 'localhost';
 }
-const localIP = getLocalIP();
+const localIPs = getLocalIPs();
 
-// 启动服务器
-server.listen(PORT, () => {
+// 启动服务器 - 监听所有网络接口
+server.listen(PORT, '0.0.0.0', () => {
     console.log('========================================');
     console.log('  iPhone 压缩工具已启动！');
     console.log('========================================');
     console.log(`\n请用浏览器访问以下地址之一：`);
-    console.log(`  • http://${localIP}:${PORT}  (推荐，用于局域网访问)`);
+    localIPs.forEach(ip => {
+        console.log(`  • http://${ip}:${PORT}`);
+    });
     console.log(`  • http://localhost:${PORT}`);
     console.log('========================================');
     console.log('  按 Ctrl+C 停止服务器');
