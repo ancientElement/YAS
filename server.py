@@ -48,6 +48,17 @@ class StaticHandler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         """简化日志输出"""
         pass  # 静默模式，减少 iSH 终端输出开销
+    
+    def handle(self):
+        """重写 handle 方法，捕获连接错误"""
+        try:
+            super().handle()
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            # 客户端断开连接，忽略错误
+            pass
+        except Exception:
+            # 其他错误也静默处理
+            pass
 
 
 def get_local_ips():
@@ -85,14 +96,21 @@ def get_local_ips():
         return ['localhost']
 
 
+class SilentTCPServer(socketserver.TCPServer):
+    """静默 TCP 服务器，不输出连接错误"""
+    def handle_error(self, request, client_address):
+        # 静默处理所有错误
+        pass
+
+
 def main():
     """启动服务器"""
     local_ips = get_local_ips()
     
     # 允许地址重用，避免端口占用问题
-    socketserver.TCPServer.allow_reuse_address = True
+    SilentTCPServer.allow_reuse_address = True
     
-    with socketserver.TCPServer(("0.0.0.0", PORT), StaticHandler) as httpd:
+    with SilentTCPServer(("0.0.0.0", PORT), StaticHandler) as httpd:
         print('=' * 40)
         print('  iPhone 压缩工具已启动！')
         print('=' * 40)
