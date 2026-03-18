@@ -296,7 +296,7 @@ def main():
             print(f'  • http://{ip}:{PORT}')
         print(f'  • http://localhost:{PORT}')
         print()
-        print('注意：需要在 iSH 中安装 FFmpeg')
+        print('注意：需要在运行环境中安装 FFmpeg')
         print('  apk add ffmpeg')
         print('=' * 50)
         print('  按 Ctrl+C 停止服务器')
