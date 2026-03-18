@@ -151,7 +151,33 @@ function compressVideo(lv) {
             canvas.height = h;
             
             // 创建视频流录制器，使用较低比特率提高性能
-            const stream = canvas.captureStream(30); // 限制30fps
+            const canvasStream = canvas.captureStream(30); // 限制30fps
+            
+            // 尝试捕获视频元素的音频轨道
+            let combinedStream = canvasStream;
+            let hasAudio = false;
+            try {
+                if (video.captureStream) {
+                    const videoStream = video.captureStream();
+                    const audioTracks = videoStream.getAudioTracks();
+                    if (audioTracks.length > 0) {
+                        // 将音频轨道添加到画布流中
+                        audioTracks.forEach(track => {
+                            canvasStream.addTrack(track);
+                        });
+                        hasAudio = true;
+                    }
+                }
+            } catch (e) {
+                // 音频捕获失败，继续只录制视频
+                console.log('音频捕获失败:', e.message);
+            }
+            
+            // 提示用户音频状态
+            if (!hasAudio) {
+                compInfo.textContent = '压缩中... (视频无声)';
+            }
+            
             let mimeType = 'video/webm';
             if (!MediaRecorder.isTypeSupported(mimeType)) {
                 mimeType = 'video/webm;codecs=vp9';
@@ -161,7 +187,7 @@ function compressVideo(lv) {
             }
             
             const options = mimeType ? { mimeType, videoBitsPerSecond: 2500000 } : {};
-            rec = new MediaRecorder(stream, options);
+            rec = new MediaRecorder(combinedStream, options);
             
             // 收集录制的数据块
             rec.ondataavailable = e => {
