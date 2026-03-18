@@ -79,7 +79,7 @@ async function compress() {
                 }, 400);
             });
 
-            xhr.addEventListener('load', () => {
+            xhr.addEventListener('load', async () => {
                 // 清除模拟进度定时器
                 if (xhr._compressInterval) {
                     clearInterval(xhr._compressInterval);
@@ -89,9 +89,11 @@ async function compress() {
                     updateProgress('compress', 100, '压缩完成 ✓');
                     setTimeout(() => resolve(xhr.response), 300);
                 } else {
-                    let errorMsg = '服务器错误';
+                    // 从 blob 中读取错误信息
+                    let errorMsg = `服务器错误 (${xhr.status})`;
                     try {
-                        const err = JSON.parse(xhr.responseText);
+                        const text = await xhr.response.text();
+                        const err = JSON.parse(text);
                         errorMsg = err.error || errorMsg;
                     } catch { }
                     reject(new Error(errorMsg));

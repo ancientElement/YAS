@@ -134,7 +134,9 @@ class CompressHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(compressed_data)
 
         except Exception as e:
+            import traceback
             print(f"压缩错误: {e}")
+            traceback.print_exc()
             self.send_json_response(500, {'error': str(e)})
 
     def send_json_response(self, code, data):
