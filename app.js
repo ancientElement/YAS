@@ -18,7 +18,7 @@ function selectFile(input) {
     btn.disabled = !selectedFile;
     // 隐藏之前的预览和下载按钮
     preview.style.display = 'none';
-    dl.style.display = 'none';
+    dlGroup.style.display = 'none';
     
     // 立即显示原始文件预览
     if (selectedFile) {
@@ -252,10 +252,20 @@ function showResult(blob, type) {
     const saved = ((1 - blob.size / selectedFile.size) * 100).toFixed(0);
     compInfo.textContent = `${(blob.size / 1024 / 1024).toFixed(2)}MB (节省${saved}%)`;
     
-    // 恢复按钮状态，显示下载按钮
+    // 恢复按钮状态，显示下载按钮组
     btn.disabled = false;
     btn.textContent = '开始压缩';
-    dl.style.display = 'block';
+    dlGroup.style.display = 'block';
+}
+
+/**
+ * 下载原视频文件
+ */
+function downloadOriginal() {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(selectedFile);
+    a.download = selectedFile.name;
+    a.click();
 }
 
 /**
