@@ -114,51 +114,113 @@ function compressVideo(lv) {
     const video = document.createElement('video');
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
+    let rec;
+    let chunks = [];
+    let progressInterval;
     
     // 设置视频属性：静音、行内播放（移动端需要）
     video.muted = true;
     video.playsInline = true;
     
+    // 错误处理
+    const handleError = (msg) => {
+        clearInterval(progressInterval);
+        compInfo.textContent = '压缩失败: ' + msg;
+        btn.disabled = false;
+        btn.textContent = '开始压缩';
+        video.pause();
+        if (rec && rec.state !== 'inactive') {
+            try { rec.stop(); } catch (e) {}
+        }
+    };
+    
     // 视频元数据加载完成后
     video.onloadeddata = () => {
-        // 按比例缩小画布尺寸
-        const w = video.videoWidth * lv;
-        const h = video.videoHeight * lv;
-        canvas.width = w;
-        canvas.height = h;
-        
-        // 创建视频流录制器
-        const stream = canvas.captureStream();
-        const rec = new MediaRecorder(stream, { mimeType: 'video/webm' });
-        const chunks = [];
-        
-        // 收集录制的数据块
-        rec.ondataavailable = e => chunks.push(e.data);
-        
-        // 录制停止后合并数据
-        rec.onstop = () => {
-            compressedBlob = new Blob(chunks, { type: 'video/webm' });
-            showResult(compressedBlob, 'video');
-        };
-        
-        // 开始播放和录制
-        video.play();
-        rec.start(100); // 每 100ms 收集一次数据
-        
-        // 逐帧绘制视频到画布
-        const draw = () => {
-            if (video.paused || video.ended) {
-                rec.stop();
+        try {
+            const duration = video.duration || 5;
+            // 按比例缩小画布尺寸
+            const w = Math.floor(video.videoWidth * lv);
+            const h = Math.floor(video.videoHeight * lv);
+            
+            if (w <= 0 || h <= 0) {
+                handleError('视频尺寸无效');
                 return;
             }
-            ctx.drawImage(video, 0, 0, w, h);
-            requestAnimationFrame(draw);
-        };
-        draw();
-        
-        // 视频时长后自动停止（或默认 5 秒）
-        setTimeout(() => video.pause(), video.duration * 1000 || 5000);
+            
+            canvas.width = w;
+            canvas.height = h;
+            
+            // 创建视频流录制器，使用较低比特率提高性能
+            const stream = canvas.captureStream(30); // 限制30fps
+            let mimeType = 'video/webm';
+            if (!MediaRecorder.isTypeSupported(mimeType)) {
+                mimeType = 'video/webm;codecs=vp9';
+                if (!MediaRecorder.isTypeSupported(mimeType)) {
+                    mimeType = '';
+                }
+            }
+            
+            const options = mimeType ? { mimeType, videoBitsPerSecond: 2500000 } : {};
+            rec = new MediaRecorder(stream, options);
+            
+            // 收集录制的数据块
+            rec.ondataavailable = e => {
+                if (e.data && e.data.size > 0) {
+                    chunks.push(e.data);
+                }
+            };
+            
+            // 录制停止后合并数据
+            rec.onstop = () => {
+                clearInterval(progressInterval);
+                if (chunks.length === 0) {
+                    handleError('录制数据为空');
+                    return;
+                }
+                compressedBlob = new Blob(chunks, { type: 'video/webm' });
+                showResult(compressedBlob, 'video');
+            };
+            
+            rec.onerror = () => {
+                handleError('录制器错误');
+            };
+            
+            // 开始播放和录制
+            video.play().catch(() => handleError('视频播放失败'));
+            rec.start(1000); // 每1秒收集一次数据，减少开销
+            
+            // 显示进度
+            const startTime = Date.now();
+            progressInterval = setInterval(() => {
+                const elapsed = (Date.now() - startTime) / 1000;
+                const progress = Math.min((elapsed / duration) * 100, 99);
+                compInfo.textContent = `压缩中... ${Math.floor(progress)}%`;
+            }, 500);
+            
+            // 逐帧绘制视频到画布，使用 setTimeout 替代 requestAnimationFrame 降低 CPU 占用
+            const draw = () => {
+                if (video.paused || video.ended || rec.state === 'inactive') {
+                    if (rec.state !== 'inactive') {
+                        try { rec.stop(); } catch (e) {}
+                    }
+                    return;
+                }
+                ctx.drawImage(video, 0, 0, w, h);
+                setTimeout(draw, 33); // 约30fps
+            };
+            draw();
+            
+            // 视频时长后自动停止（加1秒缓冲）
+            setTimeout(() => {
+                if (!video.paused) video.pause();
+            }, (duration + 1) * 1000);
+            
+        } catch (err) {
+            handleError(err.message);
+        }
     };
+    
+    video.onerror = () => handleError('视频加载失败');
     
     // 创建临时 URL 加载视频
     video.src = URL.createObjectURL(selectedFile);

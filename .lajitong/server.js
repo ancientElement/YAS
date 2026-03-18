@@ -38,27 +38,25 @@ const server = http.createServer((req, res) => {
     const ext = path.extname(filePath).toLowerCase();
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
     
-    // 读取文件
-    fs.readFile(filePath, (err, data) => {
-        if (err) {
-            // 文件不存在
-            if (err.code === 'ENOENT') {
-                res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-                res.end('404 页面不存在');
-            } else {
-                // 其他错误
-                res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
-                res.end('500 服务器错误');
-            }
-            return;
-        }
-        
-        // 成功响应
+    // 使用流式读取代替一次性读取，减少内存占用
+    const stream = fs.createReadStream(filePath);
+    
+    stream.on('open', () => {
         res.writeHead(200, { 
             'Content-Type': contentType,
-            'Cache-Control': 'no-cache'  // 开发时禁用缓存
+            'Cache-Control': 'no-cache'
         });
-        res.end(data);
+        stream.pipe(res);
+    });
+    
+    stream.on('error', (err) => {
+        if (err.code === 'ENOENT') {
+            res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+            res.end('404 页面不存在');
+        } else {
+            res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+            res.end('500 服务器错误');
+        }
     });
 });
 
