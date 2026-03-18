@@ -14,7 +14,12 @@ import json
 import subprocess
 import tempfile
 import shutil
+import threading
+import time
 from urllib.parse import parse_qs, urlparse
+
+# 全局进度存储
+compress_progress = {}  # {client_id: {'percent': 0, 'status': 'idle'}}
 
 # 配置
 PORT = 3000
@@ -75,9 +80,9 @@ def get_local_ips():
         return ['localhost']
 
 
-def compress_video(input_path, output_path, quality='medium'):
+def compress_video_with_progress(input_path, output_path, quality='medium', client_id=None):
     """
-    使用 FFmpeg 压缩视频
+    使用 FFmpeg 压缩视频，带进度显示
     quality: low(0.5), medium(0.7), high(0.9) 对应尺寸比例
     """
     # 质量参数映射
@@ -88,27 +93,109 @@ def compress_video(input_path, output_path, quality='medium'):
     }
     scale = scale_map.get(quality, 'iw*0.7:ih*0.7')
     
-    # FFmpeg 命令
+    # 获取视频时长
+    duration = 0
+    try:
+        probe_cmd = ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', 
+                     '-of', 'default=noprint_wrappers=1:nokey=1', input_path]
+        result = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=10)
+        duration = float(result.stdout.strip())
+    except:
+        pass
+    
+    # 检测输入文件是否有音频流
+    has_audio = False
+    try:
+        probe_cmd = ['ffprobe', '-v', 'error', '-select_streams', 'a', 
+                     '-show_entries', 'stream=codec_type', '-of', 
+                     'default=noprint_wrappers=1:nokey=1', input_path]
+        result = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=10)
+        has_audio = 'audio' in result.stdout.lower()
+    except:
+        pass
+    
+    # FFmpeg 命令，输出进度信息
     cmd = [
         'ffmpeg',
+        '-hide_banner',  # 隐藏版本信息
+        '-loglevel', 'warning',  # 只显示警告和错误
         '-i', input_path,
         '-vf', f'scale={scale}',
         '-c:v', 'libx264',
-        '-preset', 'fast',  # 压缩速度预设
-        '-crf', '23',       # 质量 (0-51, 越小越好)
-        '-c:a', 'aac',
-        '-b:a', '128k',
-        '-movflags', '+faststart',  # 优化网络播放
-        '-y',               # 覆盖输出文件
-        output_path
+        '-preset', 'fast',
+        '-crf', '23',
+        '-pix_fmt', 'yuv420p',  # 确保兼容性
+        '-movflags', '+faststart',
+        '-progress', 'pipe:1',  # 输出进度到 stdout
+        '-y'
     ]
     
+    # 根据是否有音频添加音频编码参数
+    if has_audio:
+        cmd.extend(['-c:a', 'aac', '-b:a', '128k', '-ar', '44100'])
+    else:
+        cmd.append('-an')  # 无音频
+    
+    cmd.append(output_path)
+    
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-        if result.returncode != 0:
-            print(f"FFmpeg error: {result.stderr}")
-            return False, result.stderr
+        # Windows 上使用 creationflags 避免显示控制台窗口
+        creationflags = 0
+        if os.name == 'nt':
+            creationflags = subprocess.CREATE_NO_WINDOW
+        
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
+                                   bufsize=1, universal_newlines=True, 
+                                   creationflags=creationflags)
+        
+        last_percent = 0
+        error_output = []
+        
+        while True:
+            line = process.stdout.readline()
+            if not line:
+                if process.poll() is not None:
+                    break
+                continue
+            
+            line = line.strip()
+            if not line:
+                continue
+            
+            # 收集错误信息（最后几行）
+            error_output.append(line)
+            if len(error_output) > 20:
+                error_output.pop(0)
+            
+            # 解析进度
+            if 'out_time_ms=' in line and 'N/A' not in line:
+                try:
+                    time_str = line.split('=')[1].strip()
+                    if time_str and time_str != 'N/A':
+                        time_ms = int(time_str)
+                        if duration > 0:
+                            percent = min(int((time_ms / 1000000) / duration * 100), 99)
+                            if percent != last_percent:
+                                last_percent = percent
+                                if client_id:
+                                    compress_progress[client_id] = {'percent': percent, 'status': 'compressing'}
+                                bar = '█' * (percent // 5) + '░' * (20 - percent // 5)
+                                print(f"\r  压缩进度: [{bar}] {percent}%", end='', flush=True)
+                except:
+                    pass
+        
+        print()  # 换行
+        process.wait()
+        
+        if process.returncode != 0:
+            error_msg = '\n'.join(error_output[-5:])
+            print(f"  FFmpeg error: {error_msg[:300]}")
+            return False, error_msg
+        
+        if client_id:
+            compress_progress[client_id] = {'percent': 100, 'status': 'done'}
         return True, None
+        
     except subprocess.TimeoutExpired:
         return False, "压缩超时"
     except Exception as e:
@@ -212,12 +299,17 @@ class CompressHandler(http.server.SimpleHTTPRequestHandler):
             input_path = os.path.join(UPLOAD_DIR, f'{temp_id}_input.mp4')
             output_path = os.path.join(UPLOAD_DIR, f'{temp_id}_output.mp4')
             
+            # 生成客户端 ID
+            client_id = temp_id
+            
             # 保存上传的文件
             with open(input_path, 'wb') as f:
                 f.write(file_data)
             
-            # 压缩视频
-            success, error = compress_video(input_path, output_path, quality)
+            print(f"\n[新任务] 开始压缩: {filename} ({len(file_data)/1024/1024:.1f}MB)")
+            
+            # 压缩视频（带进度）
+            success, error = compress_video_with_progress(input_path, output_path, quality, client_id)
             
             if not success:
                 # 清理临时文件
@@ -235,10 +327,14 @@ class CompressHandler(http.server.SimpleHTTPRequestHandler):
             original_size = os.path.getsize(input_path)
             compressed_size = len(compressed_data)
             
-            # 清理临时文件
+            # 清理临时文件和进度记录
             for p in [input_path, output_path]:
                 if os.path.exists(p):
                     os.remove(p)
+            if client_id in compress_progress:
+                del compress_progress[client_id]
+            
+            print(f"[完成] 压缩完成: {filename} -> {compressed_size/1024/1024:.1f}MB\n")
             
             # 发送响应
             self.send_response(200)

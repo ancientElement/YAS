@@ -74,9 +74,9 @@
             color: white;
         }
         .compare {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
             margin-top: 15px;
         }
         .box {
@@ -84,6 +84,14 @@
             border-radius: 8px;
             padding: 10px;
             text-align: center;
+        }
+        .box-row {
+            display: flex;
+            gap: 15px;
+            align-items: flex-start;
+        }
+        .box-row .box {
+            flex: 1;
         }
         .box h3 {
             font-size: 14px;
@@ -93,13 +101,38 @@
         .box video, .box img {
             width: 100%;
             border-radius: 4px;
-            max-height: 200px;
+            max-height: 300px;
             object-fit: contain;
         }
         .info {
             font-size: 12px;
             color: #999;
             margin-top: 5px;
+        }
+        .progress-container {
+            margin: 15px 0;
+            display: none;
+        }
+        .progress-label {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 10px;
+            background: #e0e0e0;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #007AFF, #5856D6);
+            border-radius: 5px;
+            transition: width 0.3s ease;
+            width: 0%;
         }
         .progress {
             text-align: center;
@@ -137,16 +170,36 @@
         
         <button id="btn" onclick="compress()" disabled>开始压缩</button>
         
-        <div id="progress" class="progress" style="display:none">
-            上传中... <span id="progressText">0%</span>
+        <!-- 上传进度条 -->
+        <div id="uploadProgress" class="progress-container">
+            <div class="progress-label">
+                <span id="uploadLabel">上传中...</span>
+                <span id="uploadPercent">0%</span>
+            </div>
+            <div class="progress-bar">
+                <div id="uploadFill" class="progress-fill"></div>
+            </div>
+        </div>
+        
+        <!-- 压缩进度条 -->
+        <div id="compressProgress" class="progress-container">
+            <div class="progress-label">
+                <span id="compressLabel">服务器压缩中...</span>
+                <span id="compressPercent">0%</span>
+            </div>
+            <div class="progress-bar">
+                <div id="compressFill" class="progress-fill"></div>
+            </div>
         </div>
         
         <div class="compare" id="preview" style="display:none">
+            <!-- 原始文件 -->
             <div class="box">
                 <h3>原始</h3>
                 <div id="orig"></div>
                 <div class="info" id="origInfo"></div>
             </div>
+            <!-- 压缩后文件 -->
             <div class="box">
                 <h3>压缩后</h3>
                 <div id="comp"></div>
@@ -154,8 +207,8 @@
             </div>
         </div>
         
+        <button id="dlOriginal" onclick="downloadOriginal()">下载原视频</button>
         <div id="dlGroup" style="display:none;margin-top:10px">
-            <button id="dlOriginal" onclick="downloadOriginal()">下载原视频</button>
             <button id="dl" onclick="download()">下载压缩视频</button>
         </div>
         
@@ -193,39 +246,98 @@
             compInfo.textContent = '等待压缩...';
         }
 
+        function updateProgress(type, percent, label) {
+            const container = type === 'upload' ? uploadProgress : compressProgress;
+            const fill = type === 'upload' ? uploadFill : compressFill;
+            const percentEl = type === 'upload' ? uploadPercent : compressPercent;
+            const labelEl = type === 'upload' ? uploadLabel : compressLabel;
+            
+            container.style.display = 'block';
+            fill.style.width = percent + '%';
+            percentEl.textContent = Math.round(percent) + '%';
+            if (label) labelEl.textContent = label;
+        }
+
+        function hideProgress() {
+            uploadProgress.style.display = 'none';
+            compressProgress.style.display = 'none';
+            uploadFill.style.width = '0%';
+            compressFill.style.width = '0%';
+        }
+
         async function compress() {
             if (!selectedFile) return;
             
             const quality = document.querySelector('input[name="lv"]:checked').value;
             
             btn.disabled = true;
-            btn.textContent = '压缩中...';
-            progress.style.display = 'block';
-            progressText.textContent = '上传中...';
+            btn.textContent = '处理中...';
+            hideProgress();
             
             try {
-                // 创建 FormData
-                const formData = new FormData();
-                formData.append('file', selectedFile);
-                formData.append('quality', quality);
-                
-                // 发送请求到服务器
-                const response = await fetch('/api/compress', {
-                    method: 'POST',
-                    body: formData
+                // 使用 XMLHttpRequest 获取上传进度
+                const compressedData = await new Promise((resolve, reject) => {
+                    const xhr = new XMLHttpRequest();
+                    
+                    // 上传进度监听
+                    xhr.upload.addEventListener('progress', (e) => {
+                        if (e.lengthComputable) {
+                            const percent = (e.loaded / e.total) * 100;
+                            updateProgress('upload', percent, '上传中...');
+                        }
+                    });
+                    
+                    xhr.upload.addEventListener('load', () => {
+                        updateProgress('upload', 100, '上传完成');
+                        // 开始模拟压缩进度
+                        let compressPercent = 0;
+                        xhr._compressInterval = setInterval(() => {
+                            compressPercent += Math.random() * 8 + 2;
+                            if (compressPercent >= 95) {
+                                compressPercent = 95;
+                                // 不在这里清除定时器，等待服务器响应
+                            }
+                            updateProgress('compress', compressPercent, '服务器压缩中...');
+                        }, 400);
+                    });
+                    
+                    xhr.addEventListener('load', () => {
+                        // 清除模拟进度定时器
+                        if (xhr._compressInterval) {
+                            clearInterval(xhr._compressInterval);
+                            xhr._compressInterval = null;
+                        }
+                        if (xhr.status === 200) {
+                            updateProgress('compress', 100, '压缩完成 ✓');
+                            setTimeout(() => resolve(xhr.response), 300);
+                        } else {
+                            let errorMsg = '服务器错误';
+                            try {
+                                const err = JSON.parse(xhr.responseText);
+                                errorMsg = err.error || errorMsg;
+                            } catch {}
+                            reject(new Error(errorMsg));
+                        }
+                    });
+                    
+                    xhr.addEventListener('error', () => reject(new Error('网络错误')));
+                    xhr.addEventListener('abort', () => reject(new Error('上传被取消')));
+                    
+                    xhr.open('POST', '/api/compress');
+                    xhr.responseType = 'blob';
+                    
+                    const formData = new FormData();
+                    formData.append('file', selectedFile);
+                    formData.append('quality', quality);
+                    xhr.send(formData);
                 });
                 
-                progress.style.display = 'none';
+                hideProgress();
                 
-                if (!response.ok) {
-                    const error = await response.json().catch(() => ({}));
-                    throw new Error(error.error || `服务器错误: ${response.status}`);
-                }
-                
-                // 获取压缩后的文件
-                compressedBlob = await response.blob();
-                const originalSize = parseInt(response.headers.get('X-Original-Size') || selectedFile.size);
-                const compressedSize = parseInt(response.headers.get('X-Compressed-Size') || compressedBlob.size);
+                // 使用已获取的数据
+                compressedBlob = compressedData;
+                const originalSize = selectedFile.size;
+                const compressedSize = compressedData.size;
                 
                 // 显示结果
                 compressedUrl = URL.createObjectURL(compressedBlob);
@@ -242,14 +354,18 @@
             } catch (err) {
                 alert('压缩失败: ' + err.message);
                 compInfo.textContent = '压缩失败';
+                hideProgress();
             } finally {
                 btn.disabled = false;
                 btn.textContent = '开始压缩';
-                progress.style.display = 'none';
             }
         }
 
         function downloadOriginal() {
+            if (!selectedFile) {
+                alert('请选择文件');
+                return
+            }
             const a = document.createElement('a');
             a.href = URL.createObjectURL(selectedFile);
             a.download = selectedFile.name;
